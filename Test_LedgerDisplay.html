@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <title>WebSocket Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #a1c4fd, #c2e9fb);
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus {
+            border-color: #6a11cb;
+            outline: none;
+        }
+        button {
+            cursor: pointer;
+            transition: background-color 0.3s;
+            border: none;
+        }
+        #addReceiverBtn {
+            background-color: #6a11cb;
+            color: white;
+        }
+        #addReceiverBtn:hover {
+            background-color: #2575fc;
+        }
+        #sendBtn {
+            background-color: #28a745;
+            color: white;
+        }
+        #sendBtn:hover {
+            background-color: #218838;
+        }
+        .title {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 26px;
+            font-weight: bold;
+            color: #333;
+        }
+        .response {
+            margin-top: 30px;
+            width: 100%;
+            max-width: 400px;
+            white-space: pre-wrap;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .feedback {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e0f7fa;
+            border: 1px solid #b2ebf2;
+            border-radius: 5px;
+            color: #00796b;
+            display: none; /* Hidden by default */
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">ZKP-BC</div>
+    <div class="container">
+        <h2>WebSocket Test Client</h2>
+
+        <label for="creditCardInfo">Credit Card Info:</label>
+        <input id="creditCardInfo" placeholder="Enter Credit Card Info" />
+
+        <label for="receiverDropdown">Receiver:</label>
+        <select id="receiverDropdown">
+            <option value="">Select or enter receiver name</option>
+        </select>
+        <input id="receiverInput" placeholder="Enter new receiver name" />
+        <button id="addReceiverBtn">Add Receiver</button>
+        <button id="sendBtn">Send Transaction</button>
+
+        <div class="feedback" id="feedbackMessage"></div> <!-- Feedback area -->
+    </div>
+
+    <h3>Server Response:</h3>
+    <div class="response" id="ledger">Loading ledger...</div>
+    <pre class="response" id="serverResponse"></pre>
+
+    <script>
+        window.onbeforeunload = () => {
+            sessionStorage.clear();
+        };
+
+        let socket;
+
+        function connectWebSocket() {
+            socket = new WebSocket('ws://localhost:8080');
+
+            socket.onopen = () => {
+                console.log('WebSocket connection established.');
+                fetchLedger();
+            };
+
+            socket.onmessage = (event) => {
+                console.log('Received message from server:', event.data);
+                // Check for ledger or confirmation message
+                if (event.data.startsWith('====== Ledger ======')) {
+                    document.getElementById('ledger').textContent = event.data;
+                } else {
+                    showFeedback(event.data); // Show server feedback
+                }
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket connection closed.');
+                setTimeout(connectWebSocket, 1000);
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket Error: ', error);
+            };
+        }
+
+        function fetchLedger() {
+            console.log('Fetching ledger...');
+            socket.send('getLedger');
+        }
+
+        function loadReceivers() {
+            const receiverDropdown = document.getElementById('receiverDropdown');
+            const receivers = JSON.parse(localStorage.getItem('receivers')) || [];
+            receiverDropdown.innerHTML = '<option value="">Select or enter receiver name</option>';
+            receivers.forEach(receiver => {
+                const option = document.createElement('option');
+                option.value = receiver;
+                option.textContent = receiver;
+                receiverDropdown.appendChild(option);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('ledger').textContent = 'Ledger will appear here...';
+            loadReceivers();
+        });
+
+        document.getElementById('addReceiverBtn').addEventListener('click', () => {
+            const receiverInput = document.getElementById('receiverInput');
+            const receiverName = receiverInput.value.trim();
+            if (receiverName) {
+                const receivers = JSON.parse(localStorage.getItem('receivers')) || [];
+                if (!receivers.includes(receiverName)) {
+                    receivers.push(receiverName);
+                    localStorage.setItem('receivers', JSON.stringify(receivers));
+                    loadReceivers();
+                    receiverInput.value = '';
+                } else {
+                    alert('Receiver name already exists.');
+                }
+            }
+        });
+
+        document.getElementById('sendBtn').addEventListener('click', () => {
+            const creditCardInfo = document.getElementById('creditCardInfo').value.trim();
+            const sender = "User"; // Automatically set the sender to "User"
+            const receiver = document.getElementById('receiverDropdown').value;
+
+            console.log(`Credit Card Info: ${creditCardInfo}, Sender: ${sender}, Receiver: ${receiver}`);
+
+            if (!creditCardInfo || !receiver) {
+                alert('Please fill out all fields.');
+                return;
+            }
+
+            const message = `${creditCardInfo},${sender},${receiver}`;
+            console.log('Sending message:', message);
+            socket.send(message);
+        });
+
+        function showFeedback(message) {
+            const feedbackMessage = document.getElementById('feedbackMessage');
+            feedbackMessage.textContent = message;
+            feedbackMessage.style.display = 'block'; // Show the feedback message
+
+            // Hide the message after a few seconds
+            setTimeout(() => {
+                feedbackMessage.style.display = 'none';
+            }, 3000);
+        }
+
+        connectWebSocket();
+    </script>
+</body>
+</html>
